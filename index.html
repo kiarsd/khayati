@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="fa" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="خیاطی">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script><script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<title>خیاطی</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#faf7f2;--card:#fff;--tx:#2a2420;--mu:#7a6f66;--ac:#8c3b4a;--bd:#e7dfd4;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c1917;--card:#292524;--tx:#f5efe8;--mu:#a8a29e;--ac:#e08a99;--bd:#44403c}}
+:root[data-theme="dark"]{--bg:#1c1917;--card:#292524;--tx:#f5efe8;--mu:#a8a29e;--ac:#e08a99;--bd:#44403c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.7 Vazirmatn,Tahoma,sans-serif;max-width:720px;margin-inline:auto;padding:12px}
+h1{font-size:20px;margin:6px 0}h3{margin:0 0 6px;font-size:16px}
+nav{display:flex;gap:6px;overflow-x:auto;margin:10px 0}
+nav button{white-space:nowrap}
+button,input,select,textarea{font:inherit;color:var(--tx);background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:8px 10px}
+button{cursor:pointer}button.on,button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+input,select,textarea{width:100%;margin:3px 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin:8px 0}
+.g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}.g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.mu{color:var(--mu);font-size:13px}.tag{background:var(--bd);border-radius:20px;padding:1px 10px;font-size:12px}
+.row{display:flex;gap:6px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.card{box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.hero{background:linear-gradient(135deg,var(--ac),#c9788a);color:#fff;border-radius:18px;padding:18px;margin:8px 0}.hero h2{margin:0 0 4px;font-size:19px}.hero div{opacity:.92}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0}.stats .card{margin:0;text-align:center;padding:10px 4px}.stats .i{font-size:24px}.stats .n{font-size:19px;font-weight:700;color:var(--ac)}
+.qa{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}.qa button{padding:14px 8px;font-weight:700;border-radius:14px}
+.bar{height:6px;border-radius:6px;background:var(--bd);overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ac);border-radius:6px}
+.empty{text-align:center;padding:24px 12px}.empty .i{font-size:44px}
+.chat{max-height:45vh;overflow-y:auto}.m{padding:6px 10px;border-radius:12px;margin:4px 0;background:var(--bd);max-width:85%}.m.me{background:var(--ac);color:#fff;margin-inline-start:auto}
+</style></head><body>
+<h1>✂️ خیاطی</h1><div id="app" class="mu">در حال بارگذاری…</div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const ST=["جدید","برش","دوخت","پروف","آماده","تحویل شد"],ROLE={customer:"مشتری",tailor:"خیاط",admin:"مدیر"};
+const TYPES=["کت","شلوار","مانتو","پیراهن","دامن","لباس مجلسی","اصلاح لباس","سایر"];
+const MS=[["chest","دور سینه"],["waist","دور کمر"],["hip","دور باسن"],["shoulder","عرض شانه"],["sleeve","قد آستین"],["len","قد لباس"]];
+const T={customer:["خانه","سفارش‌های من","پشتیبانی"],tailor:["خانه","سفارش‌ها","سفارش جدید","پشتیبانی"],admin:["خانه","سفارش‌ها","سفارش جدید","مشتری‌ها","حسابداری","دعوت‌ها","پشتیبانی"]};
+let db,me,my,tab=0,thread=null,ready=false,unlocked=false,authH=null,showPw=false,flash="",arm="",S={users:[],orders:[],msgs:[],ledger:[],notifs:[]};
+const fmt=n=>Number(n||0).toLocaleString("fa-IR");
+const staff=()=>my&&my.role!=="customer";
+function prog(s){return `<div class="bar"><i style="width:${(s+1)/ST.length*100}%"></i></div>`}
+function home(){
+  const mine=my.role==="customer"?S.orders.filter(o=>o.cid===me):S.orders;
+  const act=mine.filter(o=>o.status<5),rdy=mine.filter(o=>o.status===4).length,due=mine.reduce((s,o)=>s+(o.price-o.paid),0);
+  const inn=S.ledger.filter(l=>l.type==="in").reduce((s,l)=>s+l.amount,0),out=S.ledger.filter(l=>l.type==="out").reduce((s,l)=>s+l.amount,0);
+  const sub={customer:"سفارش‌هایت را از اینجا دنبال کن",tailor:"کارهای امروز شما اینجاست",admin:"نمای کلی کارگاه"}[my.role];
+  const st=my.role==="customer"?[["🧵","در حال انجام",act.length],["✅","آماده تحویل",rdy],["🔔","آمادهٔ پروف",mine.filter(o=>o.status===3).length]]
+   :my.role==="tailor"?[["🆕","جدید",mine.filter(o=>o.status===0).length],["🪡","در دوخت",mine.filter(o=>o.status===1||o.status===2).length],["✅","آماده",rdy]]
+   :[["🧵","سفارش فعال",act.length],["💰","سود (تومان)",fmt(inn-out)],["👥","مشتری",S.users.filter(u=>u.role==="customer").length]];
+  const qa=my.role==="customer"?[["📋 سفارش‌های من",1],["💬 پشتیبانی",2]]:my.role==="tailor"?[["➕ سفارش جدید",2],["📋 سفارش‌ها",1],["💬 پشتیبانی",3]]:[["📋 سفارش‌ها",1],["➕ سفارش جدید",2],["📒 حسابداری",4],["💬 پشتیبانی",6]];
+  const rec=[...mine].sort((a,b)=>b.t-a.t).slice(0,3);
+  return `${my.role==="customer"?notes():""}<div class="hero"><h2>سلام ${esc(my.name)} 👋</h2><div>${sub}</div></div>
+<div class="stats">${st.map(([i,l,n])=>`<div class="card"><div class="i">${i}</div><div class="n">${n}</div><div class="mu">${l}</div></div>`).join("")}</div>
+<div class="qa">${qa.map(([l,i])=>`<button class="${i===qa[0][1]?"p":""}" onclick="tab=${i};render()">${l}</button>`).join("")}</div>
+<h3 style="margin-top:14px">آخرین سفارش‌ها</h3>
+${rec.length?rec.map(o=>`<div class="card"><div class="row"><b>${esc(o.type)}${my.role==="customer"?"":" – "+esc(o.cname)}</b><span class="tag">${ST[o.status]}</span></div>${prog(o.status)}<div class="mu">${esc(o.fabric)}</div></div>`).join(""):`<div class="card empty"><div class="i">👗</div><b>هنوز سفارشی ثبت نشده</b><div class="mu">${my.role==="customer"?"اولین سفارشت را با دکمهٔ بالا ثبت کن":"وقتی مشتری‌ها سفارش بدهند اینجا می‌بینید"}</div></div>`}`;
+}
+function newOrder(){const cs=S.users.filter(u=>u.role==="customer");return `<div class="card"><h3>ثبت سفارش و اندازه‌ها</h3><select id="oc" onchange="$('#on2').style.display=this.value?'none':'block'"><option value="">مشتری حضوری (بدون حساب)</option>${cs.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select><input id="on2" placeholder="نام مشتری">
+<div class="g2"><select id="ot">${TYPES.map(t=>`<option>${t}</option>`).join("")}</select><input id="of" placeholder="پارچه / رنگ"></div>
+<div class="mu">اندازه‌ها (سانتی‌متر)</div><div class="g">${MS.map(([k,l])=>`<input id="m_${k}" type="number" inputmode="decimal" placeholder="${l}">`).join("")}</div>
+<input id="od" placeholder="تاریخ تحویل مدنظر (مثلاً ۱۵ آبان)"><textarea id="on" rows="2" placeholder="توضیحات و مدل دلخواه"></textarea>
+<button class="p" onclick="addOrder()">ثبت سفارش</button></div>`}
+async function addOrder(){
+  const m={};MS.forEach(([k])=>m[k]=$("#m_"+k).value);
+  const cid=$("#oc").value,u=S.users.find(x=>x.id===cid),cname=u?u.name:($("#on2").value.trim()||"مشتری");
+  await db.collection("orders").add({cid,cname,type:$("#ot").value,fabric:$("#of").value,due:$("#od").value,notes:$("#on").value,m,status:0,price:0,paid:0,t:Date.now()});
+  tab=1;render();
+}
+function orders(list){
+  if(!list.length)return `<div class="card mu">سفارشی وجود ندارد.</div>`;
+  if(!staff())return [...list].sort((a,b)=>b.t-a.t).map(o=>`<div class="card"><div class="row"><b>${esc(o.type)}</b><span class="tag">${ST[o.status]}</span></div>${prog(o.status)}<div class="row mu">${ST.map((s,i)=>`<span style="${i===o.status?"color:var(--ac);font-weight:700":""}">${s}</span>`).join("")}</div>${o.status===3?`<div style="color:var(--ac);margin-top:6px">🔔 لباس شما برای پروف آماده است؛ لطفاً به کارگاه مراجعه کنید.</div>`:""}</div>`).join("");
+  return [...list].sort((a,b)=>b.t-a.t).map(o=>`<div class="card"><div class="row"><b>${esc(o.type)} – ${esc(o.cname)}</b><span class="tag">${ST[o.status]}</span></div>
+${prog(o.status)}<div class="mu">${esc(o.fabric)} ${o.due?"· تحویل: "+esc(o.due):""}</div>
+<div class="mu">${MS.filter(([k])=>o.m&&o.m[k]).map(([k,l])=>l+": "+esc(o.m[k])).join(" · ")}</div>
+${o.notes?`<div>${esc(o.notes)}</div>`:""}
+<div class="mu">قیمت: ${fmt(o.price)} · پرداخت‌شده: ${fmt(o.paid)} · مانده: ${fmt(o.price-o.paid)} تومان</div>
+${staff()?`<div class="g2"><select onchange="setSt('${o.id}',+this.value)">${ST.map((s,i)=>`<option value="${i}" ${i==o.status?"selected":""}>${s}</option>`).join("")}</select>
+<input type="number" placeholder="قیمت (تومان)" value="${o.price||""}" onchange="upd('${o.id}',{price:+this.value})"></div>
+<div class="row"><input style="flex:1" id="pay_${o.id}" type="number" placeholder="مبلغ پرداخت جدید"><button onclick="pay('${o.id}')">ثبت پرداخت</button></div>`:""}</div>`).join("");
+}
+const fl=()=>flash?`<div class="card" style="border-color:var(--ac)">${esc(flash)}</div>`:"";
+const say=t=>{flash=t;render()};
+function delU(id){if(arm!==id){arm=id;return say("برای حذف حساب دوباره دکمه را بزنید")}arm="";flash="";db.doc("users/"+id).delete()}
+const upd=(id,d)=>db.doc("orders/"+id).update(d);
+async function setSt(id,v){
+  const o=S.orders.find(x=>x.id===id);await upd(id,{status:v});
+  if(v===3&&o.cid){const text="لباس "+o.type+" شما برای پروف آماده است؛ لطفاً به کارگاه مراجعه کنید.";
+    await db.collection("notifs").add({uid:o.cid,text,read:false,t:Date.now()});
+    await db.collection("msgs").add({tid:o.cid,from:"sys",name:"خیاطی",text,t:Date.now()});}
+}
+function notes(){return S.notifs.filter(n=>n.uid===me&&!n.read).map(n=>`<div class="card row" style="border-color:var(--ac)"><span>🔔 ${esc(n.text)}</span><button onclick="db.doc('notifs/${n.id}').update({read:true})">باشه</button></div>`).join("")}
+async function pay(id){
+  const v=+$("#pay_"+id).value;if(!v)return;const o=S.orders.find(x=>x.id===id);
+  await upd(id,{paid:(o.paid||0)+v});
+  await db.collection("ledger").add({type:"in",amount:v,desc:"پرداخت سفارش "+o.type+" – "+o.cname,t:Date.now()});
+}
+function chat(){
+  let tid=my.role==="customer"?me:thread,h="";
+  if(staff()){
+    const cs=S.users.filter(u=>u.role==="customer");
+    h+=`<select onchange="thread=this.value;render()"><option value="">انتخاب مشتری…</option>${cs.map(u=>`<option value="${u.id}" ${u.id===tid?"selected":""}>${esc(u.name)}</option>`).join("")}</select>`;
+  }
+  if(!tid)return h+`<div class="card mu">یک مشتری را انتخاب کنید.</div>`;
+  return h+`<div class="card"><div class="chat">${S.msgs.filter(m=>m.tid===tid).map(m=>`<div class="m ${m.from===me?"me":""}"><div class="mu" style="color:inherit;opacity:.7">${esc(m.name)}</div>${esc(m.text)}</div>`).join("")||'<span class="mu">هنوز پیامی نیست.</span>'}</div>
+<div class="row"><input style="flex:1" id="mt" placeholder="پیام…" onkeydown="if(event.key==='Enter')send('${tid}')"><button class="p" onclick="send('${tid}')">ارسال</button></div></div>`;
+}
+async function send(tid){const t=$("#mt").value.trim();if(!t)return;await db.collection("msgs").add({tid,from:me,name:my.name,text:t,t:Date.now()})}
+function customers(){return S.users.map(u=>`<div class="card row"><div><b>${esc(u.name)}</b><div class="mu">${S.orders.filter(o=>o.cid===u.id).length} سفارش</div></div>
+<select ${u.id===me?"disabled":""} onchange="db.doc('users/${u.id}').update({role:this.value})">${Object.entries(ROLE).map(([k,v])=>`<option value="${k}" ${k===u.role?"selected":""}>${v}</option>`).join("")}</select>${u.id===me?"":`<button onclick="delU('${u.id}')">🗑</button>`}</div>`).join("")}
+function acct(){
+  const inn=S.ledger.filter(l=>l.type==="in").reduce((s,l)=>s+l.amount,0),out=S.ledger.filter(l=>l.type==="out").reduce((s,l)=>s+l.amount,0),due=S.orders.reduce((s,o)=>s+(o.price-o.paid),0);
+  return `<div class="g"><div class="card"><div class="mu">درآمد</div><b>${fmt(inn)}</b></div><div class="card"><div class="mu">هزینه</div><b>${fmt(out)}</b></div><div class="card"><div class="mu">سود</div><b>${fmt(inn-out)}</b></div></div>
+<div class="card mu">طلب از مشتری‌ها: ${fmt(due)} تومان</div>
+<div class="card"><h3>ثبت هزینه</h3><input id="ed" placeholder="شرح (پارچه، اجاره…)"><input id="ea" type="number" placeholder="مبلغ (تومان)"><button class="p" onclick="exp()">ثبت</button></div>
+${[...S.ledger].sort((a,b)=>b.t-a.t).map(l=>`<div class="card row"><span>${esc(l.desc)}</span><b style="color:${l.type==="in"?"#2e7d32":"#c62828"}">${l.type==="in"?"+":"−"}${fmt(l.amount)}</b></div>`).join("")}`}
+async function exp(){const a=+$("#ea").value,d=$("#ed").value.trim();if(!a||!d)return;await db.collection("ledger").add({type:"out",amount:a,desc:d,t:Date.now()});render()}
+/* ===== Firebase: ورود با حساب کاربری + دیتابیس ===== */
+const FIREBASE_CONFIG={apiKey:"AIzaSyCrdlu13WbwpbdR0E5uwvRVAokxTFmwLbE",authDomain:"khayati-1ff4e.firebaseapp.com",projectId:"khayati-1ff4e",storageBucket:"khayati-1ff4e.firebasestorage.app",messagingSenderId:"613945890356",appId:"1:613945890356:web:c91e0cc272fa9448c7dc61",measurementId:"G-7BPYVJF3Z1"};
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth=firebase.auth(),fs=firebase.firestore();
+try{fs.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
+db={doc:p=>{const r=fs.doc(p);return{get:async()=>{const x=await r.get();return{exists:x.exists,data:()=>x.data()}},set:v=>r.set(v),update:v=>r.update(v),delete:()=>r.delete()}},
+  collection:n=>({add:async v=>{const r=await fs.collection(n).add(v);return{id:r.id}}})};
+T.tailor=["خانه","سفارش‌ها","سفارش جدید","پشتیبانی","مشتری‌ها","حسابداری"];T.admin[5]="کاربران";
+let pwv={},cop="";
+const ro=s=>Object.entries(ROLE).map(([k,v])=>`<option value="${k}" ${k===s?"selected":""}>${v}</option>`).join("");
+
+const norm=s=>String(s||"").trim().replace(/[۰-۹]/g,d=>"۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d)).toLowerCase();
+const mail=u=>{u=norm(u);return u.includes("@")?u:u+"@khayati-app.com"};
+const okUser=u=>{u=norm(u);return u.includes("@")?/^\S+@\S+\.\S+$/.test(u):/^[a-z0-9._-]{3,30}$/.test(u)};
+const errT=e=>({"auth/email-already-in-use":"این نام کاربری قبلاً ثبت شده است","auth/weak-password":"رمز باید حداقل ۶ کاراکتر باشد","auth/invalid-email":"نام کاربری معتبر نیست","auth/network-request-failed":"اینترنت قطع است","auth/operation-not-allowed":"ورود با ایمیل/رمز در Firebase فعال نیست","permission-denied":"اجازهٔ این کار را ندارید"}[e&&e.code]||"خطا: "+((e&&e.message)||e));
+let subs=[],unsubMe=null,subRole=null,bootOpen=false,busy=false;
+const soft=()=>{if(!document.activeElement||!/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))render()};
+function stop(){subs.forEach(f=>f());subs=[];if(unsubMe){unsubMe();unsubMe=null}subRole=null;for(const k in S)S[k]=[]}
+function subscribe(role){
+  if(subRole===role)return;
+  subs.forEach(f=>f());subs=[];subRole=role;
+  const q=(n,c)=>subs.push(c(fs.collection(n)).onSnapshot(s=>{S[n]=s.docs.map(d=>({id:d.id,...d.data()}));if(n==="msgs")S.msgs.sort((a,b)=>a.t-b.t);soft()},er=>console.error(n,er)));
+  if(role==="customer"){q("orders",c=>c.where("cid","==",me));q("msgs",c=>c.where("tid","==",me));q("notifs",c=>c.where("uid","==",me))}
+  else{q("users",c=>c);q("orders",c=>c);q("msgs",c=>c);q("notifs",c=>c)}
+  if(role!=="customer")q("ledger",c=>c);
+}
+function init(){
+  auth.onAuthStateChanged(async u=>{
+    stop();me=u?u.uid:null;my=null;tab=0;flash="";ready=false;
+    if(!u){try{bootOpen=!(await fs.doc("config/bootstrap").get()).exists}catch(e){bootOpen=false}ready=true;render();return}
+    unsubMe=fs.doc("users/"+me).onSnapshot(s=>{
+      const first=!ready;my=s.exists?{id:s.id,...s.data()}:null;ready=true;
+      if(my){if(my.role==="customer")S.users=[my];subscribe(my.role)}
+      first?render():soft();
+    },()=>{ready=true;$("#app").textContent="خطا در خواندن حساب؛ اینترنت و قوانین Firestore را بررسی کنید."});
+  });
+}
+function loginScr(){
+  const hero=`<div class="hero"><div style="font-size:42px">🧵</div><h2>خیاطی</h2><div>${bootOpen?"راه‌اندازی اولیه: حساب مدیر را بسازید":"وارد شوید"}</div></div>`;
+  if(bootOpen)return hero+`<div class="card"><h3>ساخت حساب مدیر</h3><input id="rn" placeholder="نام نمایشی"><input id="ru" dir="ltr" autocapitalize="none" placeholder="نام کاربری (انگلیسی یا شماره موبایل)"><input id="rp" type="password" placeholder="رمز (حداقل ۶ کاراکتر)">${fl()}<button class="p" onclick="regAdmin()">ثبت</button></div>`;
+  return hero+`<div class="card"><input id="lu" dir="ltr" autocapitalize="none" autocomplete="username" placeholder="نام کاربری یا شماره موبایل"><input id="lp" type="password" autocomplete="current-password" placeholder="رمز" onkeydown="if(event.key==='Enter')login()">${fl()}<button class="p" onclick="login()">ورود</button></div>`}
+const inactiveScr=()=>`<div class="hero"><div style="font-size:42px">🔒</div><h2>حساب فعال نیست</h2><div>پروفایل این حساب در سیستم وجود ندارد؛ با مدیر تماس بگیرید.</div></div><button onclick="out()">خروج</button>`;
+async function login(){
+  const un=$("#lu").value,p=$("#lp").value;if(!okUser(un)||!p)return say("نام کاربری و رمز را وارد کنید");
+  try{await auth.signInWithEmailAndPassword(mail(un),p)}
+  catch(e){say(["auth/network-request-failed","auth/operation-not-allowed"].includes(e.code)?errT(e):"نام کاربری یا رمز اشتباه است")}}
+async function regAdmin(){
+  const n=$("#rn").value.trim(),un=$("#ru").value,p=$("#rp").value;
+  if(!n||!okUser(un))return say("نام و نام کاربری معتبر (حروف انگلیسی/عدد، حداقل ۳ کاراکتر) وارد کنید");
+  if(p.length<6)return say("رمز باید حداقل ۶ کاراکتر باشد");
+  let cr;busy=true;
+  try{
+    cr=await auth.createUserWithEmailAndPassword(mail(un),p);
+    const b=fs.batch();
+    b.set(fs.doc("users/"+cr.user.uid),{name:n,role:"admin",username:norm(un),t:Date.now()});
+    b.set(fs.doc("config/bootstrap"),{by:cr.user.uid,t:Date.now()});
+    await b.commit();busy=false;render();
+  }catch(e){busy=false;if(cr){try{await cr.user.delete()}catch(_){}}say(errT(e))}
+}
+function out(){auth.signOut()}
+function pwBox(){return `<div class="card"><h3>تغییر رمز من</h3><input id="pc" type="password" placeholder="رمز فعلی"><input id="pn" type="password" placeholder="رمز جدید (حداقل ۶ کاراکتر)"><div class="row"><button class="p" onclick="setPw()">ذخیره</button><button onclick="showPw=false;flash='';render()">بستن</button></div></div>`}
+async function setPw(){
+  const c=$("#pc").value,n=$("#pn").value;if(n.length<6)return say("رمز باید حداقل ۶ کاراکتر باشد");
+  const u=auth.currentUser;
+  try{await u.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(u.email,c))}catch(e){return say("رمز فعلی اشتباه است")}
+  try{await u.updatePassword(n);showPw=false;say("رمز تغییر کرد ✅")}catch(e){say(errT(e))}
+}
+function render(){
+  if(!ready)return;
+  if(!me){$("#app").innerHTML=loginScr();return}
+  if(!my){$("#app").innerHTML=busy?'<div class="card mu">در حال ساخت حساب…</div>':inactiveScr();return}
+  const tabs=T[my.role];if(tab>=tabs.length)tab=0;const name=tabs[tab];
+  let h=`<div class="row"><b>${esc(my.name)}</b><span class="tag">${ROLE[my.role]}</span><span><button onclick="showPw=!showPw;render()">🔑</button> <button onclick="out()">خروج</button></span></div>${showPw?pwBox():""}${fl()}<nav>${tabs.map((t,i)=>`<button class="${i==tab?"on":""}" onclick="tab=${i};render()">${t}</button>`).join("")}</nav>`;
+  if(name==="خانه")h+=home();
+  else if(name==="سفارش جدید")h+=newOrder();
+  else if(name==="سفارش‌های من")h+=orders(S.orders.filter(o=>o.cid===me));
+  else if(name==="سفارش‌ها")h+=orders(S.orders);
+  else if(name==="پشتیبانی")h+=chat();
+  else if(name==="مشتری‌ها")h+=customers();
+  else if(name==="کاربران")h+=usersTab();
+  else if(name==="حسابداری")h+=acct();
+  $("#app").innerHTML=h;const c=$(".chat");if(c)c.scrollTop=c.scrollHeight;
+}
+const home0=home;home=function(){return (my.role==="customer"&&my.msg?`<div class="card" style="border-color:var(--ac)">💌 ${esc(my.msg)}</div>`:"")+home0()};
+/* کاربران و رمزها (فقط مدیر) */
+/* کاربران (فقط مدیر): ساخت حساب ورود */
+function usersTab(){return `<div class="card"><h3>افزودن کاربر</h3><input id="nn" placeholder="نام نمایشی"><div class="g2"><input id="nu" dir="ltr" autocapitalize="none" placeholder="نام کاربری / موبایل"><input id="np" type="password" placeholder="رمز (حداقل ۶)"></div><select id="nr">${ro("customer")}</select><button class="p" onclick="addU()">افزودن</button></div>${fl()}`+
+S.users.map(u=>`<div class="card"><div class="row"><div><b>${esc(u.name)}</b><div class="mu" dir="ltr">${esc(u.username||"بدون حساب ورود")}</div></div><select ${u.id===me?"disabled":""} onchange="db.doc('users/${u.id}').update({role:this.value})">${ro(u.role)}</select>${u.id===me?"":`<button onclick="delU('${u.id}')">🗑</button>`}</div></div>`).join("")}
+async function addU(){
+  const n=$("#nn").value.trim(),un=$("#nu").value,p=$("#np").value;
+  if(!n||!okUser(un))return say("نام و نام کاربری معتبر (حروف انگلیسی/عدد، حداقل ۳ کاراکتر) وارد کنید");
+  if(p.length<6)return say("رمز باید حداقل ۶ کاراکتر باشد");
+  const role=$("#nr").value;let a2;
+  try{
+    a2=firebase.initializeApp(FIREBASE_CONFIG,"sec"+Date.now());
+    const cr=await a2.auth().createUserWithEmailAndPassword(mail(un),p);
+    await fs.doc("users/"+cr.user.uid).set({name:n,role,username:norm(un),t:Date.now()});
+    await a2.auth().signOut();say("کاربر ساخته شد ✅");
+  }catch(e){say(errT(e))}
+  finally{if(a2)try{await a2.delete()}catch(_){}}
+}
+/* مشتری‌ها و شخصی‌سازی (خیاط و مدیر) */
+const cf=(id,k,ph,v,t)=>`<input ${t?'type="number" ':""}placeholder="${ph}" value="${esc(v)}" onchange="db.doc('users/${id}').update({${k}:this.value})">`;
+function setM(id,k,v){const u=S.users.find(x=>x.id===id);db.doc("users/"+id).update({m:{...(u.m||{}),[k]:v}})}
+function cform(u){return `<div class="g2">${cf(u.id,"name","نام",u.name)}${cf(u.id,"phone","تلفن",u.phone)}</div>${cf(u.id,"addr","آدرس",u.addr)}<div class="g2">${cf(u.id,"disc","درصد تخفیف",u.disc,1)}${cf(u.id,"bday","تاریخ تولد",u.bday)}</div><textarea rows="2" placeholder="یادداشت خیاط: سلیقه، فرم بدن، حساسیت‌ها…" onchange="db.doc('users/${u.id}').update({note:this.value})">${esc(u.note||"")}</textarea><textarea rows="2" placeholder="پیام اختصاصی برای صفحهٔ خانهٔ مشتری" onchange="db.doc('users/${u.id}').update({msg:this.value})">${esc(u.msg||"")}</textarea><div class="mu">اندازه‌های ثابت (سانتی‌متر)</div><div class="g">${MS.map(([k,l])=>`<input type="number" inputmode="decimal" placeholder="${l}" value="${esc((u.m||{})[k])}" onchange="setM('${u.id}','${k}',this.value)">`).join("")}</div>`}
+function customers(){
+  const cs=S.users.filter(u=>u.role==="customer");
+  return `<div class="card"><h3>افزودن مشتری</h3><div class="g2"><input id="cn1" placeholder="نام"><input id="cp1" type="tel" placeholder="تلفن"></div><button class="p" onclick="addC()">افزودن</button></div>`+
+  (cs.map(u=>{const o=cop===u.id;return `<div class="card"><div class="row"><div><b>${esc(u.name)}</b> ${u.disc?`<span class="tag">تخفیف ${esc(u.disc)}٪</span>`:""}<div class="mu">${esc(u.phone||"")} · ${S.orders.filter(x=>x.cid===u.id).length} سفارش</div></div><button onclick="cop='${o?"":u.id}';render()">${o?"بستن":"شخصی‌سازی"}</button></div>${o?cform(u):""}</div>`}).join("")||`<div class="card mu">مشتری‌ای نیست.</div>`)}
+async function addC(){const n=$("#cn1").value.trim();if(!n)return;await db.doc("users/u"+Date.now().toString(36)).set({name:n,phone:$("#cp1").value,role:"customer",t:Date.now()});render()}
+/* سفارش جدید با اندازه‌های ذخیره‌شدهٔ مشتری */
+function newOrder(){const cs=S.users.filter(u=>u.role==="customer");return `<div class="card"><h3>ثبت سفارش و اندازه‌ها</h3><select id="oc" onchange="fillC(this.value)"><option value="">مشتری حضوری (بدون حساب)</option>${cs.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select><input id="on2" placeholder="نام مشتری"><div id="cn" class="mu"></div>
+<div class="g2"><select id="ot">${TYPES.map(t=>`<option>${t}</option>`).join("")}</select><input id="of" placeholder="پارچه / رنگ"></div>
+<div class="mu">اندازه‌ها (سانتی‌متر)</div><div class="g">${MS.map(([k,l])=>`<input id="m_${k}" type="number" inputmode="decimal" placeholder="${l}">`).join("")}</div>
+<input id="od" placeholder="تاریخ تحویل مدنظر"><textarea id="on" rows="2" placeholder="توضیحات و مدل دلخواه"></textarea>
+<label class="mu"><input id="sv" type="checkbox" style="width:auto"> ذخیرهٔ این اندازه‌ها در پروفایل مشتری</label><button class="p" onclick="addOrder()">ثبت سفارش</button></div>`}
+function fillC(id){const u=S.users.find(x=>x.id===id);$("#on2").style.display=id?"none":"block";
+  MS.forEach(([k])=>$("#m_"+k).value=u&&u.m&&u.m[k]||"");
+  $("#cn").innerHTML=u?[u.note?"📝 "+esc(u.note):"",u.disc?"🏷 تخفیف "+esc(u.disc)+"٪":""].filter(Boolean).join("<br>"):""}
+async function addOrder(){
+  const m={};MS.forEach(([k])=>m[k]=$("#m_"+k).value);
+  const cid=$("#oc").value,u=S.users.find(x=>x.id===cid),cname=u?u.name:($("#on2").value.trim()||"مشتری");
+  await db.collection("orders").add({cid,cname,type:$("#ot").value,fabric:$("#of").value,due:$("#od").value,notes:$("#on").value,m,status:0,price:0,paid:0,t:Date.now()});
+  if(u&&$("#sv").checked)await db.doc("users/"+cid).update({m});
+  tab=1;render();
+}
+
+init();
+</script></body></html>
